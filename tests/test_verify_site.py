@@ -59,6 +59,62 @@ class VerifySiteTests(unittest.TestCase):
 
         self.assertIn("external link must use https: http://example.com", errors)
 
+    def test_dangerous_link_schemes_are_reported(self) -> None:
+        for href in ("javascript:alert(1)", "data:text/html,unsafe"):
+            with self.subTest(href=href):
+                site_root = self.create_site(
+                    f"""<!doctype html>
+                    <html><head></head><body>
+                    <a href="{href}">Unsafe</a>
+                    </body></html>"""
+                )
+
+                errors = self.load_verifier()(site_root)
+
+                self.assertIn(f"unsupported link scheme: {href}", errors)
+
+    def test_protocol_relative_link_is_reported(self) -> None:
+        href = "//example.com/profile"
+        site_root = self.create_site(
+            f"""<!doctype html>
+            <html><head></head><body>
+            <a href="{href}">Profile</a>
+            </body></html>"""
+        )
+
+        errors = self.load_verifier()(site_root)
+
+        self.assertIn(f"external link must use https: {href}", errors)
+
+    def test_remote_assets_are_reported(self) -> None:
+        for source in ("https://example.com/app.js", "//example.com/app.js"):
+            with self.subTest(source=source):
+                site_root = self.create_site(
+                    f"""<!doctype html>
+                    <html><head></head><body>
+                    <script src="{source}"></script>
+                    </body></html>"""
+                )
+
+                errors = self.load_verifier()(site_root)
+
+                self.assertIn(f"asset must be local: {source}", errors)
+
+    def test_blank_link_without_hardening_is_reported(self) -> None:
+        href = "https://example.com"
+        site_root = self.create_site(
+            f"""<!doctype html>
+            <html><head></head><body>
+            <a href="{href}" target="_blank" rel="noopener">Example</a>
+            </body></html>"""
+        )
+
+        errors = self.load_verifier()(site_root)
+
+        self.assertIn(
+            f"target=_blank link must use rel=noopener noreferrer: {href}", errors
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
